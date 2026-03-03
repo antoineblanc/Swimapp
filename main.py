@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import anthropic
+import time
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -105,21 +106,24 @@ def analyse_one(path, name, job_id):
         upd(job_id, f"[{name}] Start signal at {go_time:.2f}s")
 
         upd(job_id, f"[{name}] Detecting water entry...")
-        ef = extract_frames(path, tmpdir, max(0,go_time-0.2), 3.5, 20, "entry")
+        ef = extract_frames(path, tmpdir, max(0,go_time-0.2), 3.5, 10, "entry")
+        time.sleep(2)
         entry = ask_claude(ef, 'When do hands FIRST touch water? JSON only: {"timestamp":2.07,"confidence":"high","note":""}', "Swimming dive analysis.")
         entry_t = entry.get("timestamp")
         upd(job_id, f"[{name}] Entry: {entry_t:.2f}s" if entry_t else f"[{name}] Entry: not found")
 
         upd(job_id, f"[{name}] Detecting end of coulée...")
         surf_start = (entry_t or go_time+1.5) + 1.0
-        sf = extract_frames(path, tmpdir, surf_start, 9.0, 8, "surf")
+        sf = extract_frames(path, tmpdir, surf_start, 9.0, 5, "surf")
+        time.sleep(2)
         surface = ask_claude(sf, f'Swimmer entered at {(entry_t or 0):.2f}s. When does HEAD first break surface? JSON only: {{"timestamp":7.4,"confidence":"high","note":""}}', "Breaststroke coulée analysis.")
         surface_t = surface.get("timestamp")
         upd(job_id, f"[{name}] Coulée end: {surface_t:.2f}s" if surface_t else f"[{name}] Coulée: not found")
 
         upd(job_id, f"[{name}] Detecting turn...")
         approx = duration * 0.45
-        tf = extract_frames(path, tmpdir, max(0,approx-10), 20.0, 4, "turn")
+        tf = extract_frames(path, tmpdir, max(0,approx-10), 20.0, 3, "turn")
+        time.sleep(2)
         wall = ask_claude(tf, f'Near turn wall around {approx:.0f}s. When do hands/feet FIRST TOUCH wall? JSON only: {{"timestamp":25.5,"confidence":"high","note":""}}', "Swim turn analysis.")
         wall_t = wall.get("timestamp")
         upd(job_id, f"[{name}] Wall touch: {wall_t:.2f}s" if wall_t else f"[{name}] Wall: not found")
@@ -127,13 +131,15 @@ def analyse_one(path, name, job_id):
         pushoff_t = None
         if wall_t:
             upd(job_id, f"[{name}] Detecting push-off...")
-            pf = extract_frames(path, tmpdir, wall_t, 3.0, 15, "po")
+            pf = extract_frames(path, tmpdir, wall_t, 3.0, 8, "po")
+            time.sleep(2)
             pushoff = ask_claude(pf, f'Touched wall at {wall_t:.2f}s. When do FEET LEAVE wall? JSON only: {{"timestamp":26.1,"confidence":"high","note":""}}', "Push-off analysis.")
             pushoff_t = pushoff.get("timestamp")
             upd(job_id, f"[{name}] Push-off: {pushoff_t:.2f}s" if pushoff_t else f"[{name}] Push-off: not found")
 
         upd(job_id, f"[{name}] Detecting finish...")
-        ff = extract_frames(path, tmpdir, max(0,duration-8), 9.0, 8, "fin")
+        ff = extract_frames(path, tmpdir, max(0,duration-8), 9.0, 5, "fin")
+        time.sleep(2)
         finish = ask_claude(ff, 'When does swimmer TOUCH finish wall? JSON only: {"timestamp":54.2,"confidence":"high","note":""}', "Finish analysis.")
         finish_t = finish.get("timestamp")
         upd(job_id, f"[{name}] Finish: {finish_t:.2f}s" if finish_t else f"[{name}] Finish: not found")
