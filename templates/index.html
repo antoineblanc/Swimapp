@@ -3,528 +3,312 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SwimTimer — 50m Phase Analysis</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<title>SwimTimer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #04080d; color: #e0edf5; font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+header { padding: 24px 40px; border-bottom: 1px solid rgba(0,170,255,0.1); display: flex; align-items: center; justify-content: space-between; }
+.logo { font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: 3px; background: linear-gradient(100deg, #0af, #fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.badge { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 2px; color: #0af; border: 1px solid rgba(0,170,255,0.2); padding: 5px 12px; border-radius: 2px; }
+main { max-width: 800px; margin: 60px auto; padding: 0 24px; }
 
-:root {
-  --bg:      #04080d;
-  --ink:     #e0edf5;
-  --muted:   rgba(224,237,245,0.3);
-  --dimmed:  rgba(224,237,245,0.12);
-  --blue:    #0af;
-  --green:   #0fe;
-  --yellow:  #fc0;
-  --red:     #f45;
-  --surface: rgba(255,255,255,0.03);
-  --border:  rgba(0,170,255,0.1);
-  --mono:    'DM Mono', monospace;
-  --body:    'DM Sans', sans-serif;
-  --display: 'Bebas Neue', sans-serif;
-}
-
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--body);
-  min-height: 100vh;
-}
-
-/* ─── animated water bg ─── */
-body::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 0;
-  background:
-    radial-gradient(ellipse 120% 60% at 50% 110%, rgba(0,120,200,0.08) 0%, transparent 70%),
-    radial-gradient(ellipse 80% 40% at 80% 0%, rgba(0,180,255,0.04) 0%, transparent 60%);
-  pointer-events: none;
-}
-
-/* ─── scanline texture ─── */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 0;
-  background-image: repeating-linear-gradient(
-    0deg, transparent, transparent 2px,
-    rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px
-  );
-  pointer-events: none; opacity: 0.4;
-}
-
-.page { position: relative; z-index: 1; }
-
-/* ─── Header ─── */
-header {
-  padding: 28px 40px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-}
-.logo { font-family: var(--display); font-size: 42px; letter-spacing: 3px; line-height: 1;
-  background: linear-gradient(100deg, var(--blue) 0%, #fff 55%, var(--green) 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.logo-tag { font-family: var(--mono); font-size: 10px; letter-spacing: 3px; color: var(--muted); margin-top: 3px; }
-.header-badge {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
-  color: var(--blue); border: 1px solid rgba(0,170,255,0.2);
-  padding: 5px 12px; border-radius: 2px;
-  background: rgba(0,170,255,0.05);
-}
-
-main { max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
-
-/* ─── Upload zone ─── */
-#upload-section { margin-bottom: 48px; }
-.section-label {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 4px;
-  color: var(--muted); text-transform: uppercase; margin-bottom: 14px;
-  display: flex; align-items: center; gap: 12px;
-}
-.section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+/* Upload */
+#upload-section { text-align: center; }
+h2 { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px; color: #0af; margin-bottom: 8px; }
+p { color: rgba(224,237,245,0.4); font-size: 14px; margin-bottom: 32px; }
 
 .drop-zone {
-  border: 1.5px dashed rgba(0,170,255,0.25);
-  border-radius: 6px; padding: 52px 32px;
-  text-align: center; cursor: pointer;
-  background: var(--surface);
-  transition: all .2s ease;
-  position: relative;
+  border: 2px dashed rgba(0,170,255,0.3); border-radius: 8px;
+  padding: 60px 32px; cursor: pointer; background: rgba(0,170,255,0.03);
+  transition: all .2s; position: relative;
 }
-.drop-zone:hover, .drop-zone.drag-over {
-  border-color: var(--blue);
-  background: rgba(0,170,255,0.04);
-}
-.drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.drop-icon { font-size: 52px; opacity: .2; margin-bottom: 16px; display: block; }
-.drop-title { font-family: var(--display); font-size: 28px; letter-spacing: 3px; color: var(--blue); margin-bottom: 6px; }
-.drop-sub { font-size: 13px; color: var(--muted); }
-.drop-limit { font-family: var(--mono); font-size: 10px; color: var(--dimmed); margin-top: 8px; }
+.drop-zone:hover { border-color: #0af; background: rgba(0,170,255,0.06); }
+.drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-icon { font-size: 48px; margin-bottom: 16px; }
+.drop-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 3px; color: #0af; }
+.drop-sub { font-size: 13px; color: rgba(224,237,245,0.3); margin-top: 6px; }
 
-/* File pills */
-#file-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.file-pill {
-  background: rgba(0,170,255,0.07); border: 1px solid rgba(0,170,255,0.15);
-  border-radius: 3px; padding: 6px 12px;
-  font-family: var(--mono); font-size: 12px; color: var(--blue);
-  display: flex; align-items: center; gap: 8px;
-}
-.file-pill button {
-  background: none; border: none; color: var(--muted); cursor: pointer;
-  font-size: 14px; line-height: 1; padding: 0;
-}
-.file-pill button:hover { color: var(--red); }
+#file-list { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.fpill { background: rgba(0,170,255,0.08); border: 1px solid rgba(0,170,255,0.2); border-radius: 4px; padding: 6px 12px; font-family: 'DM Mono', monospace; font-size: 12px; color: #0af; display: flex; align-items: center; gap: 8px; }
+.fpill button { background: none; border: none; color: rgba(224,237,245,0.3); cursor: pointer; font-size: 16px; }
+.fpill button:hover { color: #f45; }
 
-/* Analyse button */
 #analyse-btn {
-  margin-top: 20px; width: 100%;
-  background: var(--blue); color: #000;
-  border: none; border-radius: 4px;
-  font-family: var(--display); font-size: 22px; letter-spacing: 4px;
-  padding: 16px; cursor: pointer;
-  transition: all .15s;
+  margin-top: 24px; width: 100%; padding: 18px;
+  background: #0af; color: #000; border: none; border-radius: 4px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 4px;
+  cursor: pointer; transition: all .15s; display: none;
 }
-#analyse-btn:hover:not(:disabled) { background: #2cf; transform: translateY(-1px); }
-#analyse-btn:disabled { background: var(--dimmed); color: var(--muted); cursor: not-allowed; transform: none; }
+#analyse-btn:hover { background: #2cf; }
 
-/* ─── Progress ─── */
-#progress-section { display: none; margin-bottom: 48px; }
-.progress-header { font-family: var(--display); font-size: 24px; letter-spacing: 3px; color: var(--blue); margin-bottom: 16px; }
-.progress-bar-wrap { background: rgba(0,170,255,0.08); border-radius: 2px; height: 3px; margin-bottom: 20px; overflow: hidden; }
-.progress-bar { height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); width: 0%; transition: width .4s ease; animation: shimmer 1.5s ease infinite; }
-@keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:0.6} }
+/* Progress */
+#progress-section { display: none; }
+.prog-title { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px; color: #0af; margin-bottom: 16px; }
+.prog-bar-wrap { background: rgba(0,170,255,0.1); height: 4px; border-radius: 2px; margin-bottom: 20px; }
+.prog-bar { height: 100%; background: linear-gradient(90deg, #0af, #0fe); width: 5%; border-radius: 2px; transition: width .5s; }
+#log { background: rgba(255,255,255,0.02); border: 1px solid rgba(0,170,255,0.1); border-radius: 4px; padding: 16px; font-family: 'DM Mono', monospace; font-size: 12px; color: rgba(224,237,245,0.5); max-height: 200px; overflow-y: auto; line-height: 2; }
 
-#progress-log {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 4px; padding: 16px;
-  font-family: var(--mono); font-size: 11px; color: var(--muted);
-  max-height: 180px; overflow-y: auto; line-height: 1.9;
-}
-#progress-log .log-line { }
-#progress-log .log-line.done { color: var(--green); }
-#progress-log .log-line.active { color: var(--ink); }
-
-/* ─── Results ─── */
+/* Results */
 #results-section { display: none; }
+.podium { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 32px; }
+.pcard { flex: 1; min-width: 160px; background: rgba(255,255,255,0.03); border: 1px solid rgba(0,170,255,0.1); border-radius: 4px; padding: 16px; position: relative; }
+.pcard::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #0af; }
+.pcard.p1::before { background: linear-gradient(90deg, #fc0, #0fe); }
+.pcard-rank { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 3px; color: rgba(224,237,245,0.3); margin-bottom: 4px; }
+.pcard-name { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1px; }
+.pcard-time { font-family: 'DM Mono', monospace; font-size: 34px; color: #0af; line-height: 1; margin-top: 4px; }
+.pcard.p1 .pcard-time { color: #0fe; }
+.pcard-gap { font-family: 'DM Mono', monospace; font-size: 11px; color: #fc0; margin-top: 4px; }
 
-/* Summary row */
-.podium { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 36px; }
-.podium-card {
-  flex: 1; min-width: 180px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 4px; padding: 18px 20px;
-  position: relative; overflow: hidden;
-  transition: transform .15s;
-}
-.podium-card:hover { transform: translateY(-2px); }
-.podium-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blue); }
-.podium-card.rank-1::before { background: linear-gradient(90deg, var(--yellow), var(--green)); }
-.pc-rank { font-family: var(--mono); font-size: 9px; letter-spacing: 3px; color: var(--muted); margin-bottom: 6px; }
-.pc-name { font-family: var(--display); font-size: 22px; letter-spacing: 2px; color: var(--ink); }
-.pc-total { font-family: var(--mono); font-size: 36px; color: var(--blue); margin-top: 4px; line-height: 1; letter-spacing: -1px; }
-.podium-card.rank-1 .pc-total { color: var(--green); }
-.pc-gap { font-family: var(--mono); font-size: 11px; color: var(--yellow); margin-top: 4px; }
+.sec-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 4px; color: rgba(224,237,245,0.25); text-transform: uppercase; margin: 24px 0 12px; border-bottom: 1px solid rgba(0,170,255,0.08); padding-bottom: 8px; }
 
-/* Phase table */
-.phase-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-.phase-table th {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
-  color: var(--muted); padding: 10px 14px; text-align: left;
-  border-bottom: 1px solid var(--border); text-transform: uppercase;
-}
-.phase-table th.sw-col { color: var(--blue); }
-.phase-table td { padding: 12px 14px; border-bottom: 1px solid rgba(0,170,255,0.05); }
-.ph-icon { font-size: 18px; margin-right: 8px; }
-.ph-name { font-size: 15px; font-weight: 600; letter-spacing: .5px; }
-.ph-desc { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
-.t-best { font-family: var(--mono); font-size: 19px; color: var(--green); }
-.t-behind { font-family: var(--mono); font-size: 19px; color: var(--yellow); }
-.t-gap { font-size: 11px; color: rgba(255,204,0,0.5); margin-left: 4px; }
-.t-miss { font-family: var(--mono); font-size: 19px; color: var(--dimmed); }
-.t-total { font-family: var(--mono); font-size: 22px; font-weight: 500; }
+table { width: 100%; border-collapse: collapse; }
+th { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 2px; color: rgba(224,237,245,0.3); padding: 8px 12px; text-align: left; border-bottom: 1px solid rgba(0,170,255,0.08); }
+th.sw { color: #0af; }
+td { padding: 12px 12px; border-bottom: 1px solid rgba(0,170,255,0.04); }
+.ph-name { font-size: 14px; font-weight: 600; }
+.ph-desc { font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(224,237,245,0.3); margin-top: 2px; }
+.t-best { font-family: 'DM Mono', monospace; font-size: 18px; color: #0fe; }
+.t-slow { font-family: 'DM Mono', monospace; font-size: 18px; color: #fc0; }
+.t-none { font-family: 'DM Mono', monospace; font-size: 18px; color: rgba(224,237,245,0.15); }
+.t-gap { font-size: 11px; color: rgba(252,204,0,0.5); margin-left: 4px; }
 
-/* Stacked bars */
-.bar-section { margin-bottom: 40px; }
-.bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.bar-name { font-family: var(--display); font-size: 14px; letter-spacing: 1px; width: 130px; flex-shrink: 0; color: var(--ink); }
-.bar-track { flex: 1; height: 30px; background: rgba(255,255,255,0.03); border-radius: 2px; display: flex; overflow: hidden; }
-.bar-seg { height: 100%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 9px; overflow: hidden; white-space: nowrap; transition: width .8s cubic-bezier(.4,0,.2,1); }
-.bar-seg span { padding: 0 3px; font-weight: 500; }
-.s-react { background: rgba(255,200,0,0.75); color: #000; }
-.s-coul  { background: rgba(0,170,255,0.75); color: #000; }
-.s-sw25  { background: rgba(0,100,200,0.6); color: #fff; }
-.s-turn  { background: rgba(160,80,255,0.8); color: #fff; }
-.s-last  { background: rgba(0,255,200,0.6); color: #000; }
-.bar-time { font-family: var(--mono); font-size: 13px; color: var(--blue); width: 60px; text-align: right; }
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bar-name { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1px; width: 120px; flex-shrink: 0; }
+.bar-track { flex: 1; height: 28px; background: rgba(255,255,255,0.02); border-radius: 2px; display: flex; overflow: hidden; }
+.bs { height: 100%; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono', monospace; font-size: 9px; overflow: hidden; white-space: nowrap; }
+.bs span { padding: 0 3px; }
+.b1 { background: rgba(255,200,0,0.75); color: #000; }
+.b2 { background: rgba(0,170,255,0.75); color: #000; }
+.b3 { background: rgba(0,100,200,0.6); color: #fff; }
+.b4 { background: rgba(160,80,255,0.8); color: #fff; }
+.b5 { background: rgba(0,255,200,0.6); color: #000; }
+.bar-total { font-family: 'DM Mono', monospace; font-size: 12px; color: #0af; width: 55px; text-align: right; }
 
-/* Legend */
-.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-.leg { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
-.leg-dot { width: 11px; height: 11px; border-radius: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: rgba(224,237,245,0.35); }
+.ld { width: 10px; height: 10px; border-radius: 2px; }
 
-/* Reset */
-#reset-btn {
-  margin-top: 32px;
-  background: transparent; border: 1px solid var(--border);
-  color: var(--muted); border-radius: 4px;
-  font-family: var(--mono); font-size: 11px; letter-spacing: 2px;
-  padding: 10px 20px; cursor: pointer; transition: all .15s;
-}
-#reset-btn:hover { border-color: var(--blue); color: var(--blue); }
+#reset-btn { margin-top: 32px; background: transparent; border: 1px solid rgba(0,170,255,0.15); color: rgba(224,237,245,0.3); border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; padding: 10px 20px; cursor: pointer; width: 100%; }
+#reset-btn:hover { border-color: #0af; color: #0af; }
 
-/* Error */
-.error-box {
-  background: rgba(255,68,85,0.06); border: 1px solid rgba(255,68,85,0.2);
-  border-radius: 4px; padding: 16px 20px;
-  font-family: var(--mono); font-size: 12px; color: var(--red);
-  margin-bottom: 12px;
-}
-
-/* Responsive */
-@media (max-width:640px) {
-  header { padding: 20px; }
-  main { padding: 32px 16px 60px; }
-  .logo { font-size: 30px; }
-  .phase-table th:nth-child(n+3), .phase-table td:nth-child(n+3) { display: none; }
-}
+.err { background: rgba(255,68,85,0.06); border: 1px solid rgba(255,68,85,0.2); border-radius: 4px; padding: 12px 16px; font-family: 'DM Mono', monospace; font-size: 12px; color: #f45; margin-bottom: 12px; }
 </style>
 </head>
 <body>
-<div class="page">
 
 <header>
-  <div>
-    <div class="logo">SWIMTIMER</div>
-    <div class="logo-tag">50M PHASE ANALYSIS SYSTEM</div>
-  </div>
-  <div class="header-badge">POWERED BY CLAUDE VISION</div>
+  <div class="logo">SwimTimer</div>
+  <div class="badge">POWERED BY CLAUDE VISION</div>
 </header>
 
 <main>
 
-  <!-- Upload -->
-  <div id="upload-section">
-    <div class="section-label">Upload Videos</div>
+<div id="upload-section">
+  <h2>50M PHASE ANALYSIS</h2>
+  <p>Upload up to 5 swimming videos — AI automatically detects all split times</p>
 
-    <div class="drop-zone" id="drop-zone">
-      <input type="file" id="file-input" accept="video/*" multiple>
-      <span class="drop-icon">🎬</span>
-      <div class="drop-title">DROP VIDEOS HERE</div>
-      <div class="drop-sub">Or click to browse — up to 5 videos for comparison</div>
-      <div class="drop-limit">MP4 · MOV · AVI &nbsp;·&nbsp; max 500MB each</div>
-    </div>
-
-    <div id="file-list"></div>
-
-    <button id="analyse-btn" disabled>ANALYSE SWIM →</button>
+  <div class="drop-zone" id="dropzone">
+    <input type="file" id="fileinput" accept="video/*" multiple>
+    <div class="drop-icon">🎬</div>
+    <div class="drop-title">DROP VIDEO HERE</div>
+    <div class="drop-sub">MP4 · MOV · AVI &nbsp;·&nbsp; up to 5 videos for comparison</div>
   </div>
 
-  <!-- Progress -->
-  <div id="progress-section">
-    <div class="section-label">Analysis in progress</div>
-    <div class="progress-header" id="progress-title">ANALYSING...</div>
-    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
-    <div id="progress-log"></div>
-  </div>
-
-  <!-- Results -->
-  <div id="results-section">
-    <div class="section-label">Results</div>
-
-    <div class="podium" id="podium"></div>
-
-    <div class="section-label">Phase Comparison</div>
-    <div style="overflow-x:auto">
-      <table class="phase-table" id="phase-table"></table>
-    </div>
-
-    <div class="section-label">Split Breakdown</div>
-    <div class="legend">
-      <div class="leg"><div class="leg-dot s-react"></div>Reaction</div>
-      <div class="leg"><div class="leg-dot s-coul"></div>La Coulée</div>
-      <div class="leg"><div class="leg-dot s-sw25" style="background:rgba(0,100,200,0.6)"></div>First 25m</div>
-      <div class="leg"><div class="leg-dot s-turn"></div>Turn</div>
-      <div class="leg"><div class="leg-dot s-last" style="background:rgba(0,255,200,0.6)"></div>Last 25m</div>
-    </div>
-    <div class="bar-section" id="bar-section"></div>
-
-    <button id="reset-btn">← ANALYSE ANOTHER VIDEO</button>
-  </div>
-
-</main>
+  <div id="file-list"></div>
+  <button id="analyse-btn">ANALYSE →</button>
 </div>
 
-<script>
-// ─── File management ──────────────────────────────────────────────────────────
-let selectedFiles = [];
+<div id="progress-section">
+  <div class="prog-title" id="prog-title">ANALYSING...</div>
+  <div class="prog-bar-wrap"><div class="prog-bar" id="prog-bar"></div></div>
+  <div id="log"></div>
+</div>
 
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const fileList  = document.getElementById('file-list');
+<div id="results-section">
+  <div class="podium" id="podium"></div>
+  <div class="sec-label">Phase Comparison</div>
+  <div style="overflow-x:auto"><table id="tbl"></table></div>
+  <div class="sec-label">Split Breakdown</div>
+  <div class="legend">
+    <div class="leg"><div class="ld b1"></div>Reaction</div>
+    <div class="leg"><div class="ld b2"></div>La Coulée</div>
+    <div class="leg"><div class="ld b3" style="background:rgba(0,100,200,0.6)"></div>First 25m</div>
+    <div class="leg"><div class="ld b4"></div>Turn</div>
+    <div class="leg"><div class="ld b5" style="background:rgba(0,255,200,0.6)"></div>Last 25m</div>
+  </div>
+  <div id="bars"></div>
+  <button id="reset-btn">← ANALYSE ANOTHER VIDEO</button>
+</div>
+
+</main>
+
+<script>
+let files = [];
+
+const dropzone = document.getElementById('dropzone');
+const fileinput = document.getElementById('fileinput');
+const fileList = document.getElementById('file-list');
 const analyseBtn = document.getElementById('analyse-btn');
 
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  addFiles([...e.dataTransfer.files]);
-});
-fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor='#0af'; });
+dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor=''; });
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.style.borderColor=''; addFiles([...e.dataTransfer.files]); });
+fileinput.addEventListener('change', () => addFiles([...fileinput.files]));
 
-function addFiles(files) {
-  files.forEach(f => {
-    if (selectedFiles.length >= 5) return;
-    if (selectedFiles.find(x => x.name === f.name)) return;
+function addFiles(newFiles) {
+  newFiles.forEach(f => {
+    if (files.length >= 5) return;
     if (!f.type.startsWith('video/')) return;
-    selectedFiles.push(f);
+    if (files.find(x => x.name === f.name)) return;
+    files.push(f);
   });
-  renderFiles();
+  render();
 }
 
-function renderFiles() {
-  fileList.innerHTML = selectedFiles.map((f, i) => `
-    <div class="file-pill">
-      🎬 ${f.name} <span style="opacity:.4">(${(f.size/1024/1024).toFixed(0)}MB)</span>
-      <button onclick="removeFile(${i})">✕</button>
-    </div>`).join('');
-  analyseBtn.disabled = selectedFiles.length === 0;
+function render() {
+  fileList.innerHTML = files.map((f,i) => `
+    <div class="fpill">🎬 ${f.name} <span style="opacity:.4">${(f.size/1024/1024).toFixed(0)}MB</span>
+    <button onclick="removeFile(${i})">✕</button></div>`).join('');
+  analyseBtn.style.display = files.length ? 'block' : 'none';
 }
 
-function removeFile(i) {
-  selectedFiles.splice(i, 1);
-  renderFiles();
-}
+function removeFile(i) { files.splice(i,1); render(); }
 
-// ─── Analyse ──────────────────────────────────────────────────────────────────
-analyseBtn.addEventListener('click', startAnalysis);
-document.getElementById('reset-btn').addEventListener('click', () => {
-  selectedFiles = []; renderFiles();
-  document.getElementById('upload-section').style.display = '';
-  document.getElementById('progress-section').style.display = 'none';
-  document.getElementById('results-section').style.display = 'none';
-  fileInput.value = '';
-});
-
-async function startAnalysis() {
+analyseBtn.addEventListener('click', async () => {
   const form = new FormData();
-  selectedFiles.forEach(f => form.append('files', f));
-
+  files.forEach(f => form.append('files', f));
   document.getElementById('upload-section').style.display = 'none';
-  document.getElementById('progress-section').style.display = '';
+  document.getElementById('progress-section').style.display = 'block';
 
   let jobId;
   try {
     const r = await fetch('/analyse', { method: 'POST', body: form });
-    if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.detail || 'Upload failed');
-    }
-    const data = await r.json();
-    jobId = data.job_id;
-  } catch (e) {
-    showError(e.message);
-    return;
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Upload failed');
+    jobId = d.job_id;
+  } catch(e) {
+    showErr(e.message); return;
   }
+  poll(jobId);
+});
 
-  pollJob(jobId);
-}
-
-let pollInterval;
-function pollJob(jobId) {
-  let lastLogLen = 0;
-  const total = selectedFiles.length;
-  let dotCount = 0;
-
-  pollInterval = setInterval(async () => {
+function poll(jobId) {
+  let lastLen = 0, dots = 0;
+  const iv = setInterval(async () => {
     try {
-      const r = await fetch(`/status/${jobId}`);
-      const data = await r.json();
-
-      // Progress log
-      const log = document.getElementById('progress-log');
-      const newLines = data.progress.slice(lastLogLen);
-      newLines.forEach(line => {
-        const div = document.createElement('div');
-        div.className = 'log-line active';
-        div.textContent = line;
-        log.appendChild(div);
+      const r = await fetch('/status/' + jobId);
+      const d = await r.json();
+      const log = document.getElementById('log');
+      d.progress.slice(lastLen).forEach(line => {
+        log.innerHTML += `<div>${line}</div>`;
         log.scrollTop = log.scrollHeight;
       });
-      lastLogLen = data.progress.length;
-
-      // Progress bar
-      const pct = data.status === 'done' ? 100 :
-        Math.min(90, (lastLogLen / (total * 6)) * 90);
-      document.getElementById('progress-bar').style.width = pct + '%';
-
-      // Title
-      dotCount = (dotCount + 1) % 4;
-      document.getElementById('progress-title').textContent =
-        data.status === 'done' ? 'COMPLETE' : 'ANALYSING' + '.'.repeat(dotCount);
-
-      if (data.status === 'done') {
-        clearInterval(pollInterval);
-        setTimeout(() => showResults(data.results, data.generated), 600);
+      lastLen = d.progress.length;
+      document.getElementById('prog-bar').style.width = (d.status==='done' ? 100 : Math.min(90, lastLen*8)) + '%';
+      dots = (dots+1)%4;
+      document.getElementById('prog-title').textContent = d.status==='done' ? 'COMPLETE ✓' : 'ANALYSING'+'.'.repeat(dots);
+      if (d.status === 'done') {
+        clearInterval(iv);
+        setTimeout(() => showResults(d.results), 800);
       }
-    } catch(e) {
-      // keep polling
-    }
+    } catch(e) {}
   }, 1500);
 }
 
-// ─── Results rendering ────────────────────────────────────────────────────────
 const PHASES = [
-  { key: 'reaction', icon: '⚡', label: 'Reaction',  desc: 'gun → entry' },
-  { key: 'coulee',   icon: '🌊', label: 'La Coulée', desc: 'entry → first stroke' },
-  { key: 'first_25', icon: '➡️', label: 'First 25m', desc: 'gun → wall touch' },
-  { key: 'turn',     icon: '🔄', label: 'Turn',      desc: 'touch → push off' },
-  { key: 'last_25',  icon: '🏆', label: 'Last 25m',  desc: 'push off → finish' },
-  { key: 'total',    icon: '🏁', label: 'TOTAL',     desc: 'gun → finish', isTotal: true },
+  {key:'reaction', icon:'⚡', label:'Reaction',  desc:'gun → entry'},
+  {key:'coulee',   icon:'🌊', label:'La Coulée', desc:'entry → first stroke'},
+  {key:'first_25', icon:'➡️', label:'First 25m', desc:'gun → wall touch'},
+  {key:'turn',     icon:'🔄', label:'Turn',      desc:'touch → push off'},
+  {key:'last_25',  icon:'🏆', label:'Last 25m',  desc:'push off → finish'},
+  {key:'total',    icon:'🏁', label:'TOTAL',     desc:'gun → finish'},
 ];
 
-function fmt(v) { return v != null ? v.toFixed(2) + 's' : '—'; }
-function best(swimmers, key) {
-  const vals = swimmers.map(s => s[key]).filter(v => v != null);
+function fmt(v) { return v != null ? v.toFixed(2)+'s' : '—'; }
+function bestVal(swimmers, key) {
+  const vals = swimmers.map(s=>s[key]).filter(v=>v!=null);
   return vals.length ? Math.min(...vals) : null;
 }
 
-function showResults(swimmers, generated) {
-  // filter out fully errored
-  swimmers = swimmers.filter(s => s.total != null || s.error);
-
+function showResults(swimmers) {
   document.getElementById('progress-section').style.display = 'none';
-  document.getElementById('results-section').style.display = '';
+  document.getElementById('results-section').style.display = 'block';
 
-  // show errors first
-  const errSwimmers = swimmers.filter(s => s.error);
-  const okSwimmers = swimmers.filter(s => !s.error || s.total != null);
+  const sorted = [...swimmers].filter(s=>!s.error||s.total!=null).sort((a,b)=>(a.total||999)-(b.total||999));
 
-  // Sort by total
-  const sorted = [...okSwimmers].sort((a, b) => (a.total || 999) - (b.total || 999));
-
-  // ── Podium ──────────────────────────────────────────────────────────────────
-  const podium = document.getElementById('podium');
-  podium.innerHTML = '';
-
-  errSwimmers.forEach(s => {
-    podium.innerHTML += `<div class="error-box">⚠ ${s.name}: ${s.error}</div>`;
+  // podium
+  const pod = document.getElementById('podium');
+  pod.innerHTML = '';
+  swimmers.filter(s=>s.error).forEach(s => {
+    pod.innerHTML += `<div class="err">⚠ ${s.name}: ${s.error}</div>`;
+  });
+  sorted.forEach((s,i) => {
+    const gap = i>0 && sorted[0].total && s.total ? `+${(s.total-sorted[0].total).toFixed(2)}s` : '';
+    pod.innerHTML += `<div class="pcard ${i===0?'p1':''}">
+      <div class="pcard-rank">#${i+1}${i===0?' · FASTEST':''}</div>
+      <div class="pcard-name">${s.name}</div>
+      <div class="pcard-time">${fmt(s.total)}</div>
+      ${gap?`<div class="pcard-gap">${gap}</div>`:''}
+    </div>`;
   });
 
-  sorted.forEach((s, i) => {
-    const gap = i > 0 && sorted[0].total && s.total ? `+${(s.total - sorted[0].total).toFixed(2)}s behind` : '';
-    podium.innerHTML += `
-      <div class="podium-card rank-${i+1}">
-        <div class="pc-rank">#${i+1} ${i===0?'· FASTEST':''}</div>
-        <div class="pc-name">${s.name}</div>
-        <div class="pc-total">${fmt(s.total)}</div>
-        ${gap ? `<div class="pc-gap">${gap}</div>` : ''}
-      </div>`;
-  });
-
-  // ── Phase table ──────────────────────────────────────────────────────────────
-  const tbl = document.getElementById('phase-table');
-  let html = '<thead><tr><th>Phase</th>';
-  sorted.forEach(s => html += `<th class="sw-col">${s.name}</th>`);
-  html += '</tr></thead><tbody>';
-
+  // table
+  const tbl = document.getElementById('tbl');
+  let h = '<thead><tr><th>Phase</th>';
+  sorted.forEach(s => h += `<th class="sw">${s.name}</th>`);
+  h += '</tr></thead><tbody>';
   PHASES.forEach(ph => {
-    const b = best(sorted, ph.key);
-    html += `<tr><td>
-      <span class="ph-icon">${ph.icon}</span>
-      <span class="ph-name">${ph.label}</span>
-      <div class="ph-desc">${ph.desc}</div>
-    </td>`;
+    const b = bestVal(sorted, ph.key);
+    h += `<tr><td><div class="ph-name">${ph.icon} ${ph.label}</div><div class="ph-desc">${ph.desc}</div></td>`;
     sorted.forEach(s => {
       const v = s[ph.key];
-      const isBest = b != null && v != null && Math.abs(v - b) < 0.005;
-      const gap = !isBest && b != null && v != null ? `<span class="t-gap">+${(v-b).toFixed(2)}</span>` : '';
-      const cls = v == null ? 't-miss' : isBest ? 't-best' : ph.isTotal ? 't-total t-behind' : 't-behind';
-      html += `<td class="${cls}">${v != null ? v.toFixed(2)+'s'+gap : '—'}</td>`;
+      const isBest = b!=null && v!=null && Math.abs(v-b)<0.005;
+      const gap = !isBest && b!=null && v!=null ? `<span class="t-gap">+${(v-b).toFixed(2)}</span>` : '';
+      const cls = v==null ? 't-none' : isBest ? 't-best' : 't-slow';
+      h += `<td class="${cls}">${v!=null ? v.toFixed(2)+'s'+gap : '—'}</td>`;
     });
-    html += '</tr>';
+    h += '</tr>';
   });
-  html += '</tbody>';
-  tbl.innerHTML = html;
+  tbl.innerHTML = h + '</tbody>';
 
-  // ── Bars ─────────────────────────────────────────────────────────────────────
-  const maxT = Math.max(...sorted.map(s => s.total || 0));
-  const bars = document.getElementById('bar-section');
+  // bars
+  const maxT = Math.max(...sorted.map(s=>s.total||0));
+  const bars = document.getElementById('bars');
   bars.innerHTML = '';
   sorted.forEach(s => {
-    const swim25 = Math.max(0, (s.first_25||0) - (s.reaction||0) - (s.coulee||0));
+    const swim = Math.max(0,(s.first_25||0)-(s.reaction||0)-(s.coulee||0));
     const segs = [
-      { val: s.reaction, cls: 's-react' },
-      { val: s.coulee,   cls: 's-coul' },
-      { val: swim25,     cls: 's-sw25' },
-      { val: s.turn,     cls: 's-turn' },
-      { val: s.last_25,  cls: 's-last' },
+      {v:s.reaction, c:'b1'},{v:s.coulee,c:'b2'},{v:swim,c:'b3'},{v:s.turn,c:'b4'},{v:s.last_25,c:'b5'}
     ];
     let segHtml = '';
     segs.forEach(seg => {
-      if (!seg.val || seg.val <= 0) return;
-      const pct = (seg.val / maxT * 100).toFixed(1);
-      segHtml += `<div class="bar-seg ${seg.cls}" style="width:${pct}%"><span>${seg.val.toFixed(1)}s</span></div>`;
+      if (!seg.v||seg.v<=0) return;
+      const pct = (seg.v/maxT*100).toFixed(1);
+      segHtml += `<div class="bs ${seg.c}" style="width:${pct}%"><span>${seg.v.toFixed(1)}s</span></div>`;
     });
     bars.innerHTML += `<div class="bar-row">
       <div class="bar-name">${s.name}</div>
       <div class="bar-track">${segHtml}</div>
-      <div class="bar-time">${fmt(s.total)}</div>
+      <div class="bar-total">${fmt(s.total)}</div>
     </div>`;
   });
 }
 
-function showError(msg) {
-  clearInterval(pollInterval);
+function showErr(msg) {
   document.getElementById('progress-section').style.display = 'none';
-  document.getElementById('upload-section').style.display = '';
-  const existing = document.querySelector('.error-box');
-  if (existing) existing.remove();
-  const div = document.createElement('div');
-  div.className = 'error-box';
-  div.textContent = '✗ ' + msg;
-  document.getElementById('upload-section').prepend(div);
-  selectedFiles = []; renderFiles();
+  document.getElementById('upload-section').style.display = 'block';
+  document.getElementById('upload-section').insertAdjacentHTML('afterbegin', `<div class="err">✗ ${msg}</div>`);
+  files = []; render();
 }
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  files = []; render();
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('upload-section').style.display = 'block';
+  fileinput.value = '';
+});
 </script>
 </body>
 </html>
