@@ -1,0 +1,261 @@
+import os
+import json
+import wave
+import struct
+import math
+import base64
+import shutil
+import tempfile
+import subprocess
+import asyncio
+from pathlib import Path
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import anthropic
+
+app = FastAPI(title="SwimTimer API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ── Config ────────────────────────────────────────────────────────────────────
+MAX_FILE_MB = 500
+FRAME_W, FRAME_H = 640, 360
+AUDIO_SPIKE_MULT = 4
+client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def get_duration(path: str) -> float:
+    r = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path],
+        capture_output=True, text=True, timeout=30
+    )
+    data = json.loads(r.stdout)
+    for s in data["streams"]:
+        if s["codec_type"] == "video":
+            return float(s["duration"])
+    raise ValueError("No video stream found")
+
+def extract_frames(src: str, out_dir: str, start: float, dur: float, fps: int, label: str):
+    pattern = os.path.join(out_dir, f"{label}_%04d.jpg")
+    subprocess.run([
+        "ffmpeg", "-i", src,
+        "-vf", f"fps={fps},scale={FRAME_W}:{FRAME_H}",
+        "-ss", str(start), "-t", str(dur),
+        pattern, "-y", "-q:v", "2", "-loglevel", "error"
+    ], check=True, timeout=120)
+    files = sorted(Path(out_dir).glob(f"{label}_*.jpg"))
+    return [(round(start + i / fps, 3), str(f)) for i, f in enumerate(files)]
+
+def extract_audio_rms(src: str, out_dir: str):
+    wav = os.path.join(out_dir, "audio.wav")
+    subprocess.run([
+        "ffmpeg", "-i", src, "-vn", "-acodec", "pcm_s16le", "-ar", "44100",
+        wav, "-y", "-loglevel", "error"
+    ], check=True, timeout=60)
+    with wave.open(wav, "rb") as w:
+        sr, ch = w.getframerate(), w.getnchannels()
+        raw = w.readframes(w.getnframes())
+        samples = struct.unpack(f"<{len(raw)//2}h", raw)
+        mono = [(samples[i]+samples[i+1])//2 for i in range(0, len(samples), 2)] if ch == 2 else list(samples)
+    chunk = sr // 100  # 10ms
+    return [(round(i * 0.01, 3), math.sqrt(sum(x*x for x in mono[i*chunk:(i+1)*chunk]) / chunk))
+            for i in range(len(mono) // chunk)]
+
+def find_go(rms_data, window=4.0):
+    early = [(t, r) for t, r in rms_data if t <= window]
+    if not early: return 0.0
+    baseline_vals = sorted([r for t, r in early if t < 0.3])
+    baseline = baseline_vals[len(baseline_vals)//2] if baseline_vals else 100
+    threshold = max(baseline * AUDIO_SPIKE_MULT, 2000)
+    for t, r in early:
+        if r >= threshold:
+            return round(t, 3)
+    return round(max(early, key=lambda x: x[1])[0], 3)
+
+def frame_b64(path: str) -> str:
+    with open(path, "rb") as f:
+        return base64.standard_b64encode(f.read()).decode()
+
+def ask_claude(frames_with_times, question: str, hint: str = "") -> dict:
+    content = []
+    if hint:
+        content.append({"type": "text", "text": hint})
+    for t, path in frames_with_times:
+        content.append({"type": "text", "text": f"Frame at {t:.3f}s:"})
+        content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": frame_b64(path)}})
+    content.append({"type": "text", "text": question})
+    resp = client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=300,
+        messages=[{"role": "user", "content": content}]
+    )
+    text = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(text)
+    except:
+        import re
+        m = re.search(r'"timestamp"\s*:\s*([\d.]+)', text)
+        return {"timestamp": float(m.group(1)) if m else None, "confidence": "low", "note": text[:120]}
+
+# ── Analysis pipeline ─────────────────────────────────────────────────────────
+async def analyse_video(path: str, name: str, progress_cb=None) -> dict:
+    tmpdir = tempfile.mkdtemp(prefix=f"swim_{name}_")
+
+    def upd(msg):
+        if progress_cb: progress_cb(msg)
+
+    try:
+        upd("Reading video info...")
+        duration = get_duration(path)
+
+        upd("Detecting start signal from audio...")
+        rms = extract_audio_rms(path, tmpdir)
+        go_time = find_go(rms)
+
+        upd("Detecting water entry...")
+        entry_frames = extract_frames(path, tmpdir, max(0, go_time - 0.2), 3.5, 30, "entry")
+        entry = ask_claude(entry_frames,
+            'Find when hands FIRST touch water. Respond ONLY as JSON: {"timestamp": 2.07, "confidence": "high", "note": "..."}',
+            "Analysing a swimming dive entry.")
+
+        entry_t = entry.get("timestamp")
+
+        upd("Detecting end of coulée...")
+        surf_start = (entry_t or go_time + 1.5) + 1.0
+        surf_frames = extract_frames(path, tmpdir, surf_start, 9.0, 15, "surf")
+        surface = ask_claude(surf_frames,
+            f'The swimmer entered at {entry_t:.3f}s. Find when the HEAD first breaks the surface and first stroke begins. Respond ONLY as JSON: {{"timestamp": 7.4, "confidence": "high", "note": "..."}}',
+            "Analysing breaststroke coulée phase.")
+        surface_t = surface.get("timestamp")
+
+        upd("Detecting turn wall touch...")
+        approx_turn = duration * 0.45
+        turn_frames = extract_frames(path, tmpdir, max(0, approx_turn - 10), 20.0, 10, "turn")
+        wall = ask_claude(turn_frames,
+            f'Swimmer approaches turn wall around {approx_turn:.0f}s. Find when hands/feet FIRST TOUCH the wall. Respond ONLY as JSON: {{"timestamp": 25.5, "confidence": "high", "note": "..."}}',
+            "Analysing swim turn.")
+        wall_t = wall.get("timestamp")
+
+        pushoff_t = None
+        if wall_t:
+            upd("Detecting push-off...")
+            po_frames = extract_frames(path, tmpdir, wall_t, 3.0, 30, "po")
+            pushoff = ask_claude(po_frames,
+                f'Swimmer touched wall at {wall_t:.3f}s. Find when FEET LEAVE the wall. Respond ONLY as JSON: {{"timestamp": 26.1, "confidence": "high", "note": "..."}}',
+                "Analysing turn push-off.")
+            pushoff_t = pushoff.get("timestamp")
+
+        upd("Detecting finish...")
+        fin_frames = extract_frames(path, tmpdir, max(0, duration - 8), 9.0, 15, "fin")
+        finish = ask_claude(fin_frames,
+            f'Find when swimmer TOUCHES the finish wall. Respond ONLY as JSON: {{"timestamp": 54.2, "confidence": "high", "note": "..."}}',
+            "Analysing swim finish.")
+        finish_t = finish.get("timestamp")
+
+        upd("Done.")
+        return {
+            "name": name,
+            "duration": round(duration, 3),
+            "go_time": go_time,
+            "entry_time": entry_t,
+            "surface_time": surface_t,
+            "wall_time": wall_t,
+            "pushoff_time": pushoff_t,
+            "finish_time": finish_t,
+            "reaction": round(entry_t - go_time, 3) if entry_t else None,
+            "coulee":   round(surface_t - entry_t, 3) if surface_t and entry_t else None,
+            "first_25": round(wall_t - go_time, 3) if wall_t else None,
+            "turn":     round(pushoff_t - wall_t, 3) if pushoff_t and wall_t else None,
+            "last_25":  round(finish_t - pushoff_t, 3) if finish_t and pushoff_t else None,
+            "total":    round(finish_t - go_time, 3) if finish_t else None,
+            "error": None,
+        }
+    except Exception as e:
+        return {"name": name, "error": str(e), "reaction": None, "coulee": None,
+                "first_25": None, "turn": None, "last_25": None, "total": None}
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+# ── Job store (in-memory, fine for Railway single-instance) ───────────────────
+jobs: dict = {}  # job_id -> {"status": ..., "progress": [], "results": []}
+
+async def run_job(job_id: str, files: list):
+    jobs[job_id]["status"] = "running"
+    results = []
+    for name, path in files:
+        def cb(msg, n=name):
+            jobs[job_id]["progress"].append(f"[{n}] {msg}")
+        try:
+            r = await asyncio.get_event_loop().run_in_executor(
+                None, lambda p=path, n=name: asyncio.run(analyse_video(p, n, cb))
+            )
+        except Exception as e:
+            r = {"name": name, "error": str(e)}
+        results.append(r)
+    jobs[job_id]["results"] = results
+    jobs[job_id]["status"] = "done"
+    jobs[job_id]["generated"] = datetime.now().isoformat()
+    # cleanup temp video files
+    for _, path in files:
+        try: os.unlink(path)
+        except: pass
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    with open("templates/index.html") as f:
+        return f.read()
+
+@app.post("/analyse")
+async def analyse(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
+    if not client.api_key:
+        raise HTTPException(500, "ANTHROPIC_API_KEY not configured on server")
+    if len(files) > 5:
+        raise HTTPException(400, "Maximum 5 videos at once")
+
+    import uuid, time
+    job_id = str(uuid.uuid4())[:8]
+    saved = []
+
+    for f in files:
+        if f.size and f.size > MAX_FILE_MB * 1024 * 1024:
+            raise HTTPException(400, f"{f.filename} exceeds {MAX_FILE_MB}MB limit")
+        ext = Path(f.filename).suffix or ".mp4"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+        content = await f.read()
+        tmp.write(content)
+        tmp.close()
+        name = Path(f.filename).stem
+        saved.append((name, tmp.name))
+
+    jobs[job_id] = {"status": "queued", "progress": [], "results": [], "generated": None}
+    background_tasks.add_task(run_job, job_id, saved)
+    return {"job_id": job_id}
+
+@app.get("/status/{job_id}")
+async def status(job_id: str):
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {
+        "status": job["status"],
+        "progress": job["progress"],
+        "results": job["results"] if job["status"] == "done" else [],
+        "generated": job["generated"],
+    }
+
+@app.get("/health")
+async def health():
+    return {"ok": True}
